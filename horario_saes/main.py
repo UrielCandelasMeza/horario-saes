@@ -106,6 +106,9 @@ class App(tk.Tk):
         self.canvas_insc.pack(side="left", fill="both", expand=True)
         barra_insc.pack(side="right", fill="y")
         self.bind_all("<MouseWheel>", self._rueda_global)
+        for btn, delta in (("<Button-4>", 120), ("<Button-5>", -120)):  # rueda en Linux
+            self.bind_all(btn, lambda e, d=delta: (setattr(e, "delta", d),
+                                                   self._rueda_global(e)))
 
         # horario central (redibujo con retardo para no trabarse al redimensionar)
         self.canvas_horario = tk.Canvas(cuerpo, bg="white", highlightthickness=0)

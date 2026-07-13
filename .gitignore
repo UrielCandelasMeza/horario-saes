@@ -4,3 +4,5 @@ datos/
 dist/
 *.egg-info/
 build/
+dist_exe/
+*.spec
