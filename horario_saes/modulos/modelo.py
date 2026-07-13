@@ -19,6 +19,7 @@ class Rama:
     nombre: str
     padre: int | None = None
     seleccion: list[str] = field(default_factory=list)
+    candados: list[str] = field(default_factory=list)
 
 
 class Estado:
@@ -36,6 +37,7 @@ class Estado:
         self.plan: list[MateriaPlan] = []
         self.equivalencias: list[Equivalencia] = []
         self.necesarias: set[str] = set()             # checklist de materias por inscribir
+        self.cursadas: set[str] = set()               # materias ya aprobadas
         self.ramas: dict[int, Rama] = {1: Rama(1, "Principal")}
         self.rama_actual = 1
         self._next_rama = 2
@@ -132,7 +134,8 @@ class Estado:
     def bifurcar(self, nombre: str = "") -> Rama:
         actual = self.rama()
         nombre = nombre or f"{actual.nombre}.{len(self.hijos(actual.id)) + 1}"
-        nueva = Rama(self._next_rama, nombre, actual.id, list(actual.seleccion))
+        nueva = Rama(self._next_rama, nombre, actual.id, list(actual.seleccion),
+                     list(actual.candados))
         self.ramas[nueva.id] = nueva
         self._next_rama += 1
         self.rama_actual = nueva.id
@@ -195,6 +198,37 @@ class Estado:
     def quitar(self, op_id: str) -> None:
         if op_id in self.rama().seleccion:
             self.rama().seleccion.remove(op_id)
+        if op_id in self.rama().candados:
+            self.rama().candados.remove(op_id)
+
+    def esta_cursada(self, materia: str) -> bool:
+        cursadas_n = {normalizar(c) for c in self.cursadas}
+        if normalizar(materia) in cursadas_n:
+            return True
+        return bool(self.equivalentes(materia) & cursadas_n)
+
+    def combos_posibles(self, fijas: list[Opcion], pools: dict[str, list[Opcion]],
+                        cap: int = 4000) -> list[frozenset[str]] | None:
+        """Enumera todas las combinaciones completas (una opcion por materia de
+        pools, compatibles entre si y con fijas). None si supera cap combos."""
+        materias = sorted(pools, key=lambda m: len(pools[m]))
+        combos: list[frozenset[str]] = []
+        base = [op.id for op in fijas]
+
+        def rec(i: int, elegidas: list) -> bool:
+            if len(combos) > cap:
+                return False
+            if i == len(materias):
+                combos.append(frozenset(base + [op.id for op in elegidas]))
+                return True
+            for op in pools[materias[i]]:
+                if all(not chocan(op, o) for o in elegidas)                         and all(not chocan(op, f) for f in fijas):
+                    if not rec(i + 1, elegidas + [op]):
+                        return False
+            return True
+
+        completo = rec(0, [])
+        return combos if completo else None
 
     # ------------------------------------------------------------ propias
     def agregar_propia(self, nombre: str, sesiones: list[Sesion],
@@ -254,13 +288,15 @@ class Estado:
             "max_creditos": self.max_creditos,
             "colapsadas": sorted(self.colapsadas),
             "necesarias": sorted(self.necesarias),
+            "cursadas": sorted(self.cursadas),
             "colores": self.colores,
             "propias": propias,
             "rama_actual": self.rama_actual,
             "next_rama": self._next_rama,
             "next_propia": self._next_propia,
             "ramas": [
-                {"id": r.id, "nombre": r.nombre, "padre": r.padre, "seleccion": r.seleccion}
+                {"id": r.id, "nombre": r.nombre, "padre": r.padre,
+                 "seleccion": r.seleccion, "candados": r.candados}
                 for r in self.ramas.values()
             ],
         }
@@ -278,6 +314,7 @@ class Estado:
         self.max_creditos = datos.get("max_creditos")
         self.colapsadas = set(datos.get("colapsadas", []))
         self.necesarias = set(datos.get("necesarias", []))
+        self.cursadas = set(datos.get("cursadas", []))
         self.colores = datos.get("colores", {})
         self._next_rama = datos.get("next_rama", 2)
         self._next_propia = datos.get("next_propia", 1)
@@ -296,7 +333,8 @@ class Estado:
         if ramas:
             self.ramas = {
                 r["id"]: Rama(r["id"], r["nombre"], r["padre"],
-                              [i for i in r["seleccion"] if i in self.opciones])
+                              [i for i in r["seleccion"] if i in self.opciones],
+                              [i for i in r.get("candados", []) if i in self.opciones])
                 for r in ramas
             }
             self.rama_actual = datos.get("rama_actual", 1)
