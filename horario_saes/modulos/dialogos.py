@@ -213,6 +213,12 @@ class DialogoCheck(tk.Toplevel):
         en_plan: set[str] = set()
 
         def agregar_check(marco, nombre: str, detalle: str = ""):
+            if self.conjunto is estado.necesarias and estado.esta_cursada(nombre):
+                self.conjunto.discard(nombre)
+                ttk.Label(marco, text=f"✗ {nombre} — ya cursada",
+                          font=("Segoe UI", 9, "overstrike"),
+                          foreground="#B0BEC5").pack(anchor="w")
+                return
             var = tk.BooleanVar(value=nombre in estado_previo)
 
             def cambio():

@@ -30,6 +30,9 @@ class App(tk.Tk):
                         "solo_check": False, "ocultar_cursadas": False,
                         "dias": [True] * 5, "hora_ini": 7, "hora_fin": 22}
         self._combos_vistos: set[frozenset] = set()   # volátil: randoms ya dados
+        self._hist: list[frozenset] = []              # historial ◀ ▶ del random
+        self._hist_i = -1
+        self._ventanas: dict[str, tk.Toplevel] = {}
 
         self._construir_toolbar()
         self._construir_cuerpo()
@@ -51,7 +54,9 @@ class App(tk.Tk):
         ttk.Button(barra, text="📋 Plan/Equiv", command=self._abrir_plan).pack(side="left", padx=2)
         ttk.Button(barra, text="✅ Check", command=self._abrir_check).pack(side="left", padx=2)
         ttk.Button(barra, text="🎓 Cursadas", command=self._abrir_cursadas).pack(side="left", padx=2)
-        ttk.Button(barra, text="🎲 Random", command=self._aleatorio).pack(side="left", padx=2)
+        ttk.Button(barra, text="◀", width=2, command=self._rand_prev).pack(side="left", padx=(6, 0))
+        ttk.Button(barra, text="🎲 Random", command=self._aleatorio).pack(side="left")
+        ttk.Button(barra, text="▶", width=2, command=self._rand_next).pack(side="left", padx=(0, 2))
         ttk.Button(barra, text="📤 Exportar", command=self._abrir_exportar).pack(side="left", padx=2)
 
         ttk.Label(barra, text="  Créditos máx:").pack(side="left")
@@ -83,13 +88,24 @@ class App(tk.Tk):
         self._acciones_lista: dict[str, tuple[str, str]] = {}
         self.canvas_lista.bind("<Button-1>", self._click_lista)
         self.canvas_lista.bind("<Button-3>", self._click_der_lista)
-        self.canvas_lista.bind("<Enter>", lambda e: self._activar_rueda(True))
-        self.canvas_lista.bind("<Leave>", lambda e: self._activar_rueda(False))
 
-        # panel derecho: materias que estás inscribiendo
-        self.panel_insc = ttk.Frame(cuerpo, width=235)
-        self.panel_insc.pack(side="right", fill="y")
-        self.panel_insc.pack_propagate(False)
+
+        # panel derecho: materias que estás inscribiendo (con scroll)
+        marco_insc = ttk.Frame(cuerpo, width=235)
+        marco_insc.pack(side="right", fill="y")
+        marco_insc.pack_propagate(False)
+        self.canvas_insc = tk.Canvas(marco_insc, highlightthickness=0)
+        barra_insc = ttk.Scrollbar(marco_insc, orient="vertical",
+                                   command=self.canvas_insc.yview)
+        self.panel_insc = ttk.Frame(self.canvas_insc)
+        self.canvas_insc.create_window((0, 0), window=self.panel_insc,
+                                       anchor="nw", width=212)
+        self.panel_insc.bind("<Configure>", lambda e: self.canvas_insc.configure(
+            scrollregion=self.canvas_insc.bbox("all")))
+        self.canvas_insc.configure(yscrollcommand=barra_insc.set)
+        self.canvas_insc.pack(side="left", fill="both", expand=True)
+        barra_insc.pack(side="right", fill="y")
+        self.bind_all("<MouseWheel>", self._rueda_global)
 
         # horario central (redibujo con retardo para no trabarse al redimensionar)
         self.canvas_horario = tk.Canvas(cuerpo, bg="white", highlightthickness=0)
@@ -113,8 +129,16 @@ class App(tk.Tk):
         else:
             self.canvas_lista.unbind_all("<MouseWheel>")
 
-    def _rueda_lista(self, evento) -> None:
-        self.canvas_lista.yview_scroll(-3 if evento.delta > 0 else 3, "units")
+    def _rueda_global(self, ev) -> None:
+        w = self.winfo_containing(ev.x_root, ev.y_root)
+        while w is not None:
+            if w is self.canvas_lista:
+                self.canvas_lista.yview_scroll(-3 if ev.delta > 0 else 3, "units")
+                return
+            if w is self.canvas_insc or w is self.panel_insc:
+                self.canvas_insc.yview_scroll(-2 if ev.delta > 0 else 2, "units")
+                return
+            w = getattr(w, "master", None)
 
     def _redibujar_pronto(self) -> None:
         if self._redibujo_pendiente:
@@ -145,8 +169,19 @@ class App(tk.Tk):
                 "del SAES con tabuladores?")
         self.refresh()
 
+    def _unica(self, clave: str, fabrica) -> None:
+        v = self._ventanas.get(clave)
+        if v is not None and v.winfo_exists():
+            v.deiconify()
+            v.lift()
+            v.focus_set()
+            return
+        v = fabrica()
+        v.transient(self)
+        self._ventanas[clave] = v
+
     def _abrir_filtro(self) -> None:
-        DialogoFiltro(self, self.filtros, self.refresh)
+        self._unica("filtro", lambda: DialogoFiltro(self, self.filtros, self.refresh))
 
     def _bifurcar(self) -> None:
         nombre = simpledialog.askstring(
@@ -157,7 +192,7 @@ class App(tk.Tk):
         self.refresh()
 
     def _abrir_arbol(self) -> None:
-        VistaArbol(self, self.estado, self.refresh)
+        self._unica("arbol", lambda: VistaArbol(self, self.estado, self.refresh))
 
     def _abrir_bloque(self) -> None:
         DialogoBloque(self, self.estado, self.refresh)
@@ -170,15 +205,33 @@ class App(tk.Tk):
         DialogoExportar(self, self.estado)
 
     def _abrir_plan(self) -> None:
-        VistaPlan(self, self.estado)
+        self._unica("plan", lambda: VistaPlan(self, self.estado))
 
     def _abrir_cursadas(self) -> None:
-        DialogoCheck(self, self.estado, self.refresh,
+        self._unica("cursadas", lambda: DialogoCheck(self, self.estado, self.refresh,
                      conjunto=self.estado.cursadas,
                      titulo="Materias ya cursadas",
                      ayuda="Palomea las que ya aprobaste. Con el filtro "
                            "'Ocultar ya cursadas' desaparecen de la lista "
-                           "(equivalencias incluidas).")
+                           "(equivalencias incluidas)."))
+
+    def _aplicar_combo(self, combo: frozenset) -> None:
+        rama = self.estado.rama()
+        rama.seleccion = list(combo)
+        rama.candados = [i for i in rama.candados if i in rama.seleccion]
+        self.refresh()
+
+    def _rand_prev(self) -> None:
+        if self._hist_i > 0:
+            self._hist_i -= 1
+            self._aplicar_combo(self._hist[self._hist_i])
+
+    def _rand_next(self) -> None:
+        if self._hist_i < len(self._hist) - 1:
+            self._hist_i += 1
+            self._aplicar_combo(self._hist[self._hist_i])
+        else:
+            self._aleatorio()
 
     def _click_horario(self, evento) -> None:
         for item in self.canvas_horario.find_withtag("current"):
@@ -274,19 +327,24 @@ class App(tk.Tk):
 
         self._combos_vistos.add(actual)
         self._combos_vistos.add(elegido)
-        rama.seleccion = list(elegido)
-        rama.candados = [i for i in rama.candados if i in rama.seleccion]
-        self.refresh()
+        if not self._hist:
+            self._hist.append(actual)
+            self._hist_i = 0
+        self._hist = self._hist[:self._hist_i + 1]
+        self._hist.append(elegido)
+        self._hist_i = len(self._hist) - 1
+        self._aplicar_combo(elegido)
         if sin_opciones:
             self.lbl_check.config(
                 text=f"(sin opciones con filtros: {len(sin_opciones)})   |",
                 foreground="#E65100")
 
     def _abrir_check(self) -> None:
-        DialogoCheck(self, self.estado, self.refresh)
+        self._unica("check", lambda: DialogoCheck(self, self.estado, self.refresh))
 
     def _ver_profesores(self, materia: str) -> None:
-        VistaProfesores(self, self.estado, materia, self.refresh)
+        self._unica(f"prof|{materia}", lambda: VistaProfesores(
+            self, self.estado, materia, self.refresh))
 
     def _aplicar_max(self, *_):
         texto = self.var_max.get().strip().replace(",", ".")
@@ -373,6 +431,7 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------ refresh
     def refresh(self) -> None:
+        self.bind_all("<MouseWheel>", self._rueda_global)
         self.estado.guardar()
         self._refrescar_contadores()
         self._refrescar_lista()
