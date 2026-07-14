@@ -53,6 +53,11 @@ class App(tk.Tk):
             "solo_favoritos": False,
             "ocultar_incompatibles": False,
             "turno": "todos",
+            "solo_check": False,
+            "ocultar_cursadas": False,
+            "dias": [True, True, True, True, True],
+            "hora_ini": 7,
+            "hora_fin": 22,
         }
 
         self.geometry("1280x760")
@@ -674,7 +679,7 @@ class App(tk.Tk):
                 x2 = m_izq + (s.dia + 1) * col - 2
                 y1, y2 = y_de(s.inicio), y_de(s.fin)
                 extra = {"dash": (4, 2)} if op.propia else {}
-                con_candado = op.id in candados
+                con_candado = op.id in rama.candados
                 etiquetas = ()
                 if not mini:
                     tag_b = f"blk{nb}"

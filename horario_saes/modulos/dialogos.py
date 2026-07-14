@@ -345,6 +345,8 @@ class DialogoFiltro(tk.Toplevel):
 
         self.var_fav = tk.BooleanVar(value=filtros["solo_favoritos"])
         self.var_incomp = tk.BooleanVar(value=filtros["ocultar_incompatibles"])
+        self.var_check = tk.BooleanVar(value=filtros["solo_check"])
+        self.var_cursadas = tk.BooleanVar(value=filtros["ocultar_cursadas"])
         ttk.Checkbutton(cuerpo, text="Solo profesores favoritos",
                         variable=self.var_fav).pack(anchor="w")
         ttk.Checkbutton(cuerpo, text="Ocultar opciones incompatibles",
