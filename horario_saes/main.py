@@ -64,6 +64,7 @@ class App(tk.Tk):
         self.minsize(980, 600)
 
         self._acciones_lista: dict[str, tuple] = {}
+        self._bloques_horario: dict[str, str] = {}
 
         self._construir_toolbar()
         self._construir_menu_celulares()
@@ -171,6 +172,7 @@ class App(tk.Tk):
         self.canvas_horario = tk.Canvas(hor_frame, bg=Colors.WHITE, highlightthickness=0)
         self.canvas_horario.pack(fill="both", expand=True)
         self.canvas_horario.bind("<Configure>", lambda e: self._dibujar_horario())
+        self.canvas_horario.bind("<Button-1>", self._click_horario)
         paned_der.add(hor_frame, weight=3)
 
         self.panel_insc = ttk.Frame(paned_der)
@@ -536,6 +538,19 @@ class App(tk.Tk):
         if accion and accion[0] in ("hdr", "prof"):
             self._editar_creditos(accion[1])
 
+    def _click_horario(self, evento):
+        for item in self.canvas_horario.find_withtag("current"):
+            for tag in self.canvas_horario.gettags(item):
+                op_id = self._bloques_horario.get(tag)
+                if op_id:
+                    candados = self.estado.rama().candados
+                    if op_id in candados:
+                        candados.remove(op_id)
+                    else:
+                        candados.append(op_id)
+                    self.refresh()
+                    return
+
     def _accion_bajo_cursor(self):
         for item in self.canvas_lista.find_withtag("current"):
             for tag in self.canvas_lista.gettags(item):
@@ -672,6 +687,10 @@ class App(tk.Tk):
                 cv.create_text(m_izq + d * col + col / 2, m_sup / 2, text=nombre,
                                font=("Segoe UI", 10, "bold"), fill=Colors.TEXT_SECONDARY)
 
+        if not mini:
+            self._bloques_horario.clear()
+        nb = 0
+
         for op in self.estado.seleccionadas(rama):
             color = self.estado.colores.get(op.materia, Colors.DEFAULT)
             for s in op.sesiones:
@@ -687,7 +706,12 @@ class App(tk.Tk):
                     self._bloques_horario[tag_b] = op.id
                     etiquetas = (tag_b,)
                 cv.create_rectangle(x1, y1, x2, y2, fill=color,
-                                    outline=Colors.BORDER_DARK, **extra)
+                                    outline=Colors.BORDER_DARK,
+                                    width=3 if con_candado else 1,
+                                    tags=etiquetas, **extra)
+                if not mini and con_candado:
+                    cv.create_text(x2 - 11, y1 + 11, text="🔒",
+                                   font=("Segoe UI", 10), tags=etiquetas)
                 if not mini:
                     lugar = f" · {op.salon}" if op.salon and op.salon != "000" else ""
                     texto = f"{op.grupo}-{op.materia}\n{op.profesor}{lugar}"
