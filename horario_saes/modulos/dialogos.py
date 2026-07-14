@@ -177,19 +177,22 @@ class VistaPlan(tk.Toplevel):
 
 
 class DialogoCheck(tk.Toplevel):
-    """Checklist de materias que necesitas inscribir: palomea y la app avisa
-    si a la rama actual le falta alguna (contando equivalencias)."""
+    """Checklist de materias sobre un conjunto del estado (necesarias o
+    cursadas): palomea y se guarda al instante."""
 
-    def __init__(self, master, estado: Estado, al_cambiar):
+    def __init__(self, master, estado: Estado, al_cambiar,
+                 conjunto: set | None = None, titulo: str = "Check de materias por inscribir",
+                 ayuda: str = "Palomea lo que necesitas meter este semestre. Una materia "
+                              "cuenta como cubierta si inscribes su equivalencia."):
         super().__init__(master)
-        self.title("Check de materias por inscribir")
+        self.title(titulo)
         self.geometry("520x560")
         self.estado = estado
         self.al_cambiar = al_cambiar
+        self.conjunto = estado.necesarias if conjunto is None else conjunto
 
         ttk.Label(self, padding=(10, 6), justify="left", font=("Segoe UI", 9),
-                  text="Palomea lo que necesitas meter este semestre. Una materia "
-                       "cuenta como cubierta si inscribes su equivalencia.").pack(anchor="w")
+                  text=ayuda).pack(anchor="w")
 
         contenedor = ttk.Frame(self)
         contenedor.pack(fill="both", expand=True)
@@ -207,17 +210,23 @@ class DialogoCheck(tk.Toplevel):
                 -2 if ev.delta > 0 else 2, "units")))
         canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
 
-        estado_previo = set(estado.necesarias)
+        estado_previo = set(self.conjunto)
         en_plan: set[str] = set()
 
         def agregar_check(marco, nombre: str, detalle: str = ""):
+            if self.conjunto is estado.necesarias and estado.esta_cursada(nombre):
+                self.conjunto.discard(nombre)
+                ttk.Label(marco, text=f"✗ {nombre} — ya cursada",
+                          font=("Segoe UI", 9, "overstrike"),
+                          foreground="#B0BEC5").pack(anchor="w")
+                return
             var = tk.BooleanVar(value=nombre in estado_previo)
 
             def cambio():
                 if var.get():
-                    estado.necesarias.add(nombre)
+                    self.conjunto.add(nombre)
                 else:
-                    estado.necesarias.discard(nombre)
+                    self.conjunto.discard(nombre)
                 self.al_cambiar()
 
             texto = f"{nombre}" + (f"   ({detalle})" if detalle else "")
@@ -340,6 +349,33 @@ class DialogoFiltro(tk.Toplevel):
                         variable=self.var_fav).pack(anchor="w")
         ttk.Checkbutton(cuerpo, text="Ocultar opciones incompatibles",
                         variable=self.var_incomp).pack(anchor="w")
+        ttk.Checkbutton(cuerpo, text="Solo materias del check ✅",
+                        variable=self.var_check).pack(anchor="w")
+        ttk.Checkbutton(cuerpo, text="Ocultar ya cursadas 🎓",
+                        variable=self.var_cursadas).pack(anchor="w")
+
+        ttk.Label(cuerpo, text="Días:").pack(anchor="w", pady=(8, 0))
+        marco_dias = ttk.Frame(cuerpo)
+        marco_dias.pack(anchor="w")
+        self.vars_dias = [tk.BooleanVar(value=v) for v in filtros["dias"]]
+        for i, d in enumerate(("Lun", "Mar", "Mie", "Jue", "Vie")):
+            ttk.Checkbutton(marco_dias, text=d, variable=self.vars_dias[i]
+                            ).pack(side="left", padx=2)
+
+        ttk.Label(cuerpo, text="Rango de horas:").pack(anchor="w", pady=(8, 0))
+        self.var_hini = tk.IntVar(value=filtros["hora_ini"])
+        self.var_hfin = tk.IntVar(value=filtros["hora_fin"])
+        for var, texto in ((self.var_hini, "desde"), (self.var_hfin, "hasta")):
+            fila = ttk.Frame(cuerpo)
+            fila.pack(fill="x")
+            ttk.Label(fila, text=texto, width=6).pack(side="left")
+            etiqueta = ttk.Label(fila, text=f"{var.get()}:00", width=6)
+            escala = ttk.Scale(fila, from_=7, to=22, variable=var,
+                               command=lambda v, va=var, et=etiqueta: (
+                                   va.set(round(float(v))),
+                                   et.config(text=f"{va.get()}:00")))
+            escala.pack(side="left", fill="x", expand=True, padx=4)
+            etiqueta.pack(side="left")
 
         ttk.Label(cuerpo, text="Turno:").pack(anchor="w", pady=(8, 0))
         self.var_turno = tk.StringVar(value=filtros["turno"])
@@ -353,9 +389,18 @@ class DialogoFiltro(tk.Toplevel):
             filtros["solo_favoritos"] = self.var_fav.get()
             filtros["ocultar_incompatibles"] = self.var_incomp.get()
             filtros["turno"] = self.var_turno.get()
+            filtros["solo_check"] = self.var_check.get()
+            filtros["ocultar_cursadas"] = self.var_cursadas.get()
+            filtros["dias"] = [v.get() for v in self.vars_dias]
+            if self.var_hfin.get() < self.var_hini.get():
+                self.var_hfin.set(self.var_hini.get())
+            filtros["hora_ini"] = self.var_hini.get()
+            filtros["hora_fin"] = self.var_hfin.get()
             al_cambiar()
 
-        for var in (self.var_texto, self.var_fav, self.var_incomp, self.var_turno):
+        for var in (self.var_texto, self.var_fav, self.var_incomp, self.var_turno,
+                    self.var_check, self.var_cursadas, self.var_hini, self.var_hfin,
+                    *self.vars_dias):
             var.trace_add("write", aplicar)
 
         def limpiar():
@@ -363,6 +408,12 @@ class DialogoFiltro(tk.Toplevel):
             self.var_fav.set(False)
             self.var_incomp.set(False)
             self.var_turno.set("todos")
+            self.var_check.set(False)
+            self.var_cursadas.set(False)
+            for v in self.vars_dias:
+                v.set(True)
+            self.var_hini.set(7)
+            self.var_hfin.set(22)
 
         botones = ttk.Frame(cuerpo)
         botones.pack(pady=(10, 0))

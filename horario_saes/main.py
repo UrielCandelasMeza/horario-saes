@@ -490,6 +490,20 @@ class App(tk.Tk):
                 return False
             if f["turno"] == "vesp" and inicio_min < 15 * 60:
                 return False
+        if f["ocultar_cursadas"] and not op.propia                 and self.estado.esta_cursada(op.materia):
+            return False
+        if f["solo_check"] and self.estado.necesarias and not op.propia:
+            from horario_saes.modulos.parser_saes import normalizar
+            objetivo = {normalizar(n) for n in self.estado.necesarias}
+            if normalizar(op.materia) not in objetivo                     and not (self.estado.equivalentes(op.materia) & objetivo):
+                return False
+        if not all(f["dias"]):
+            if any(not f["dias"][s.dia] for s in op.sesiones):
+                return False
+        if f["hora_ini"] > 7 or f["hora_fin"] < 22:
+            if any(s.inicio < f["hora_ini"] * 60 or s.fin > f["hora_fin"] * 60
+                   for s in op.sesiones):
+                return False
         return True
 
     def _click_lista(self, evento):
@@ -660,6 +674,13 @@ class App(tk.Tk):
                 x2 = m_izq + (s.dia + 1) * col - 2
                 y1, y2 = y_de(s.inicio), y_de(s.fin)
                 extra = {"dash": (4, 2)} if op.propia else {}
+                con_candado = op.id in candados
+                etiquetas = ()
+                if not mini:
+                    tag_b = f"blk{nb}"
+                    nb += 1
+                    self._bloques_horario[tag_b] = op.id
+                    etiquetas = (tag_b,)
                 cv.create_rectangle(x1, y1, x2, y2, fill=color,
                                     outline=Colors.BORDER_DARK, **extra)
                 if not mini:
@@ -669,7 +690,7 @@ class App(tk.Tk):
                         texto = f"{op.materia}\n{op.nota or ''}{lugar}"
                     cv.create_text((x1 + x2) / 2, (y1 + y2) / 2, text=texto,
                                    font=("Segoe UI", 8), justify="center",
-                                   width=x2 - x1 - 6)
+                                   width=x2 - x1 - 6, tags=etiquetas)
 
     # ------------------------------------------------------------- ramas
     def _refrescar_ramas(self):
