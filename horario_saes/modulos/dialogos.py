@@ -456,7 +456,8 @@ class VistaProfesores(tk.Toplevel):
         self.canvas.configure(yscrollcommand=barra.set)
         self.canvas.pack(side="left", fill="both", expand=True)
         barra.pack(side="right", fill="y")
-        self.canvas.bind_all("<MouseWheel>", self._rueda)
+        self.bind("<Enter>", lambda e: self.canvas.bind_all(
+            "<MouseWheel>", self._rueda))
         self.bind("<Destroy>", lambda e: self.canvas.unbind_all("<MouseWheel>")
                   if e.widget is self else None)
         self._llenar()

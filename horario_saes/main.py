@@ -33,6 +33,7 @@ class App(tk.Tk):
         self._hist: list[frozenset] = []              # historial ◀ ▶ del random
         self._hist_i = -1
         self._ventanas: dict[str, tk.Toplevel] = {}
+        self._ultima_rama: int | None = None
 
         self._construir_toolbar()
         self._construir_cuerpo()
@@ -107,6 +108,8 @@ class App(tk.Tk):
         self.canvas_insc.pack(side="left", fill="both", expand=True)
         barra_insc.pack(side="right", fill="y")
         self.bind_all("<MouseWheel>", self._rueda_global)
+        self.bind("<Enter>", lambda e: self.bind_all("<MouseWheel>",
+                                                     self._rueda_global))
         for btn, delta in (("<Button-4>", 120), ("<Button-5>", -120)):  # rueda en Linux
             self.bind_all(btn, lambda e, d=delta: (setattr(e, "delta", d),
                                                    self._rueda_global(e)))
@@ -126,12 +129,6 @@ class App(tk.Tk):
         self.lbl_rama.pack(side="left", padx=(0, 10))
         self.marco_ramas = ttk.Frame(pie)
         self.marco_ramas.pack(side="left", fill="x")
-
-    def _activar_rueda(self, activo: bool) -> None:
-        if activo:
-            self.canvas_lista.bind_all("<MouseWheel>", self._rueda_lista)
-        else:
-            self.canvas_lista.unbind_all("<MouseWheel>")
 
     def _rueda_global(self, ev) -> None:
         w = self.winfo_containing(ev.x_root, ev.y_root)
@@ -185,10 +182,12 @@ class App(tk.Tk):
         self._ventanas[clave] = v
 
     def _abrir_saes(self) -> None:
+        self._unica("saes", self._crear_dialogo_saes)
+
+    def _crear_dialogo_saes(self) -> tk.Toplevel:
         from horario_saes.modulos.saes import ESCUELAS
         dlg = tk.Toplevel(self)
         dlg.title("Descargar del SAES (beta)")
-        dlg.transient(self)
         cuerpo = ttk.Frame(dlg, padding=12)
         cuerpo.pack()
         ttk.Label(cuerpo, text="Escuela:").grid(row=0, column=0, sticky="w")
@@ -203,6 +202,7 @@ class App(tk.Tk):
         ).grid(row=1, column=0, columnspan=2, pady=8)
         ttk.Button(cuerpo, text="Cerrar", command=dlg.destroy).grid(
             row=2, column=0, columnspan=2)
+        return dlg
 
     def _abrir_filtro(self) -> None:
         self._unica("filtro", lambda: DialogoFiltro(self, self.filtros, self.refresh))
@@ -283,29 +283,34 @@ class App(tk.Tk):
             cubiertas.add(normalizar(op.materia))
             cubiertas |= e.equivalentes(op.materia)
 
-        # materias objetivo: las del check si hay, si no las inscritas ahorita
+        # slots objetivo: cada necesaria del check junta sus materias
+        # equivalentes en UN solo slot; sin check, las inscritas ahorita
+        slots: dict[str, list[str]] = {}
         if e.necesarias:
-            objetivo_n = {normalizar(n) for n in e.necesarias}
-            materias = [m for m in e.orden_materias
-                        if normalizar(m) in objetivo_n
-                        or (e.equivalentes(m) & objetivo_n)]
+            for nec in sorted(e.necesarias):
+                nn = normalizar(nec)
+                if nn in cubiertas:
+                    continue
+                slots[nec] = [m for m in e.orden_materias
+                              if normalizar(m) == nn or nn in e.equivalentes(m)]
         else:
-            materias = [op.materia for op in sel if not op.propia]
-        materias = [m for m in dict.fromkeys(materias)
-                    if normalizar(m) not in cubiertas]
-        if not materias:
+            for op in sel:
+                if not op.propia and normalizar(op.materia) not in cubiertas:
+                    slots.setdefault(op.materia, [op.materia])
+        if not slots:
             messagebox.showinfo("Random", "No hay materias que sortear: todo "
                                 "está con candado o no hay check/selección.")
             return
 
         pools: dict[str, list] = {}
         sin_opciones = []
-        for m in materias:
-            pool = [op for op in e.opciones_de(m) if self._pasa_filtro(op)]
+        for slot, mats in slots.items():
+            pool = [op for m in mats for op in e.opciones_de(m)
+                    if self._pasa_filtro(op)]
             if pool:
-                pools[m] = pool
+                pools[slot] = pool
             else:
-                sin_opciones.append(m)
+                sin_opciones.append(slot)
         if not pools:
             messagebox.showinfo("Random", "Con estos filtros ninguna materia "
                                 "objetivo tiene opciones.")
@@ -456,6 +461,10 @@ class App(tk.Tk):
     # ------------------------------------------------------------ refresh
     def refresh(self) -> None:
         self.bind_all("<MouseWheel>", self._rueda_global)
+        if self.estado.rama_actual != self._ultima_rama:
+            self._ultima_rama = self.estado.rama_actual
+            self._hist.clear()
+            self._hist_i = -1
         self.estado.guardar()
         self._refrescar_contadores()
         self._refrescar_lista()
@@ -532,7 +541,11 @@ class App(tk.Tk):
                                       foreground="#C62828")
             else:
                 self.lbl_check.config(text="Check ✔   |", foreground="#2E7D32")
-        if self.focus_get() is None or self.focus_get().winfo_class() != "TEntry":
+        try:
+            foco = self.focus_get()
+        except KeyError:
+            foco = None
+        if foco is None or foco.winfo_class() != "TEntry":
             self.var_max.set("" if e.max_creditos is None else f"{e.max_creditos:g}")
 
     # ------------------------------------------------------- lista lateral

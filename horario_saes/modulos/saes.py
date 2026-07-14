@@ -5,7 +5,10 @@ por eso todo va sobre una misma sesión de requests. Las rutas de descarga se
 afinan contra el SAES real de cada escuela.
 """
 import requests
+import urllib3
 from bs4 import BeautifulSoup
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 ESCUELAS = {
     "UPIICSA": "https://www.saes.upiicsa.ipn.mx",
