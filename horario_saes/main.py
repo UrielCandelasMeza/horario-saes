@@ -47,6 +47,7 @@ class App(tk.Tk):
         barra = ttk.Frame(self, padding=(8, 6))
         barra.pack(fill="x")
         ttk.Button(barra, text="📂 Cargar TXT", command=self._cargar_txt).pack(side="left", padx=2)
+        ttk.Button(barra, text="🌐 SAES", command=self._abrir_saes).pack(side="left", padx=2)
         ttk.Button(barra, text="🔍 Filtrar", command=self._abrir_filtro).pack(side="left", padx=2)
         ttk.Button(barra, text="🌿 Bifurcar", command=self._bifurcar).pack(side="left", padx=2)
         ttk.Button(barra, text="🌳 Árbol", command=self._abrir_arbol).pack(side="left", padx=2)
@@ -182,6 +183,26 @@ class App(tk.Tk):
         v = fabrica()
         v.transient(self)
         self._ventanas[clave] = v
+
+    def _abrir_saes(self) -> None:
+        from horario_saes.modulos.saes import ESCUELAS
+        dlg = tk.Toplevel(self)
+        dlg.title("Descargar del SAES (beta)")
+        dlg.transient(self)
+        cuerpo = ttk.Frame(dlg, padding=12)
+        cuerpo.pack()
+        ttk.Label(cuerpo, text="Escuela:").grid(row=0, column=0, sticky="w")
+        var_esc = tk.StringVar(value="UPIICSA")
+        ttk.Combobox(cuerpo, textvariable=var_esc, values=list(ESCUELAS),
+                     state="readonly", width=28).grid(row=0, column=1, pady=2)
+        ttk.Label(cuerpo, justify="left", foreground="#E65100", text=(
+            "Función en beta: el login con captcha ya está armado,\n"
+            "pero la descarga de horarios/equivalencias se termina de\n"
+            "calibrar contra el SAES real de tu escuela.\n"
+            "Mientras tanto: 📂 Cargar TXT sigue siendo el camino.")
+        ).grid(row=1, column=0, columnspan=2, pady=8)
+        ttk.Button(cuerpo, text="Cerrar", command=dlg.destroy).grid(
+            row=2, column=0, columnspan=2)
 
     def _abrir_filtro(self) -> None:
         self._unica("filtro", lambda: DialogoFiltro(self, self.filtros, self.refresh))
