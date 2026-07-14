@@ -39,7 +39,8 @@ class Estado:
         self.necesarias: set[str] = set()             # checklist de materias por inscribir
         self.cursadas: set[str] = set()               # materias ya aprobadas
         self.foros: list[str] = [
-            "https://foroupiicsa.net/diccionario/buscar/{profesor}"]
+            "https://foroupiicsa.net/diccionario/buscar/{profesor}",
+            "https://www.misprofesores.com/Buscar?buscar=Profesores&q={profesor}"]
         self.ramas: dict[int, Rama] = {1: Rama(1, "Principal")}
         self.rama_actual = 1
         self._next_rama = 2
