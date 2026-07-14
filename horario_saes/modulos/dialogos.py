@@ -3,6 +3,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from horario_saes.modulos.exportar import exportar_ramas
+from horario_saes.modulos.iconos import FA, FONT_SOLID, FONT_REGULAR
 from horario_saes.modulos.modelo import Estado
 from horario_saes.modulos.parser_saes import DIAS, Sesion, fmt_hora
 from horario_saes.modulos.reloj import RelojPicker
@@ -335,7 +336,7 @@ class DialogoFiltro(tk.Toplevel):
 
         self.var_fav = tk.BooleanVar(value=filtros["solo_favoritos"])
         self.var_incomp = tk.BooleanVar(value=filtros["ocultar_incompatibles"])
-        ttk.Checkbutton(cuerpo, text="Solo profesores favoritos ★",
+        ttk.Checkbutton(cuerpo, text="Solo profesores favoritos",
                         variable=self.var_fav).pack(anchor="w")
         ttk.Checkbutton(cuerpo, text="Ocultar opciones incompatibles",
                         variable=self.var_incomp).pack(anchor="w")
@@ -413,8 +414,8 @@ class VistaProfesores(tk.Toplevel):
             fila = ttk.Frame(self.interior, padding=(8, 4))
             fila.pack(fill="x")
             fav = profesor in self.estado.favoritos
-            estrella = tk.Label(fila, text="★" if fav else "☆", cursor="hand2",
-                                font=("Segoe UI", 13),
+            estrella = tk.Label(fila, text=FA.STAR, cursor="hand2",
+                                font=(FONT_SOLID if fav else FONT_REGULAR, 13),
                                 fg="#F9A825" if fav else "#B0BEC5")
             estrella.pack(side="left")
             estrella.bind("<Button-1>", lambda e, p=profesor: self._toggle(p))
